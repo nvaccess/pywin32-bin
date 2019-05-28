@@ -15,3 +15,4 @@ It was created using the following steps:
 	* All files from the `pywin32_system32` dirctory
 	* The complete `win32com` dirctory
 	* The complete `win32comext` dirctory
+	* The `pythoncom.py` module

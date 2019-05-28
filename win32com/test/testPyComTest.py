@@ -13,12 +13,8 @@ from win32com.client import constants, DispatchBaseClass, CastTo, VARIANT
 from win32com.test.util import RegisterPythonServer
 from pywin32_testutil import str2memory
 import datetime
-try:
-    import decimal
-except ImportError:
-    import win32com.decimal_23 as decimal
-if sys.version_info > (2,4):
-    import win32timezone # win32timezone doesn't import on 2.3...
+import decimal
+import win32timezone
 
 importMsg = "**** PyCOMTest is not installed ***\n  PyCOMTest is a Python test specific COM client and server.\n  It is likely this server is not installed on this machine\n  To install the server, you must get the win32com sources\n  and build it using MS Visual C++"
 
@@ -32,11 +28,11 @@ from win32com.client import gencache
 try:
     gencache.EnsureModule('{6BCDCB60-5605-11D0-AE5F-CADD4C000000}', 0, 1, 1)
 except pythoncom.com_error:
-    print "The PyCOMTest module can not be located or generated."
-    print importMsg
+    print("The PyCOMTest module can not be located or generated.")
+    print(importMsg)
     raise RuntimeError(importMsg)
 
-# We had a bg where RegisterInterfaces would fail if gencache had 
+# We had a bg where RegisterInterfaces would fail if gencache had
 # already been run - exercise that here
 from win32com import universal
 universal.RegisterInterfaces('{6BCDCB60-5605-11D0-AE5F-CADD4C000000}', 0, 1, 1)
@@ -60,7 +56,7 @@ def check_get_set(func, arg):
 def check_get_set_raises(exc, func, arg):
     try:
         got = func(arg)
-    except exc, e:
+    except exc as e:
         pass # what we expect!
     else:
         raise error("%s with arg %r didn't raise %s - returned %r" % (func, arg, exc, got))
@@ -68,8 +64,8 @@ def check_get_set_raises(exc, func, arg):
 def progress(*args):
     if verbose:
         for arg in args:
-            print arg,
-        print
+            print(arg, end=' ')
+        print()
 
 def TestApplyResult(fn, args, result):
     try:
@@ -83,7 +79,7 @@ def TestApplyResult(fn, args, result):
         raise error("%s failed - result not %r but %r" % (pref, result, rc))
 
 def TestConstant(constName, pyConst):
-    try: 
+    try:
         comConst = getattr(constants, constName)
     except:
         raise error("Constant %s missing" % (constName,))
@@ -114,9 +110,39 @@ class RandomEventHandler:
 
     def _DumpFireds(self):
         if not self.fireds:
-            print "ERROR: Nothing was received!"
-        for firedId, no in self.fireds.iteritems():
+            print("ERROR: Nothing was received!")
+        for firedId, no in self.fireds.items():
             progress("ID %d fired %d times" % (firedId, no))
+
+# A simple handler class that derives from object (ie, a "new style class") -
+# only relevant for Python 2.x (ie, the 2 classes should be identical in 3.x)
+class NewStyleRandomEventHandler(object):
+    def _Init(self):
+        self.fireds = {}
+    def OnFire(self, no):
+        try:
+            self.fireds[no] = self.fireds[no] + 1
+        except KeyError:
+            self.fireds[no] = 0
+    def OnFireWithNamedParams(self, no, a_bool, out1, out2):
+        # This test exists mainly to help with an old bug, where named
+        # params would come in reverse.
+        Missing = pythoncom.Missing
+        if no is not Missing:
+            # We know our impl called 'OnFire' with the same ID
+            assert no in self.fireds
+            assert no+1==out1, "expecting 'out1' param to be ID+1"
+            assert no+2==out2, "expecting 'out2' param to be ID+2"
+        # The middle must be a boolean.
+        assert a_bool is Missing or type(a_bool)==bool, "middle param not a bool"
+        return out1+2, out2+2
+
+    def _DumpFireds(self):
+        if not self.fireds:
+            print("ERROR: Nothing was received!")
+        for firedId, no in self.fireds.items():
+            progress("ID %d fired %d times" % (firedId, no))
+
 
 # Test everything which can be tested using both the "dynamic" and "generated"
 # COM objects (or when there are very subtle differences)
@@ -128,19 +154,19 @@ def TestCommon(o, is_generated):
     progress("Checking default args")
     rc = o.TestOptionals()
     if  rc[:-1] != ("def", 0, 1) or abs(rc[-1]-3.14)>.01:
-        print rc
+        print(rc)
         raise error("Did not get the optional values correctly")
     rc = o.TestOptionals("Hi", 2, 3, 1.1)
     if  rc[:-1] != ("Hi", 2, 3) or abs(rc[-1]-1.1)>.01:
-        print rc
+        print(rc)
         raise error("Did not get the specified optional values correctly")
     rc = o.TestOptionals2(0)
     if  rc != (0, "", 1):
-        print rc
+        print(rc)
         raise error("Did not get the optional2 values correctly")
     rc = o.TestOptionals2(1.1, "Hi", 2)
     if  rc[1:] != ("Hi", 2) or abs(rc[0]-1.1)>.01:
-        print rc
+        print(rc)
         raise error("Did not get the specified optional2 values correctly")
 
     progress("Checking getting/passing IUnknown")
@@ -237,7 +263,7 @@ def TestCommon(o, is_generated):
     TestConstant("UCharTest", 255)
     TestConstant("CharTest", -1)
     # 'Hello Loraine', but the 'r' is the "Registered" sign (\xae)
-    TestConstant("StringTest", u"Hello Lo\xaeaine") 
+    TestConstant("StringTest", "Hello Lo\xaeaine")
 
     progress("Checking dates and times")
     if issubclass(pywintypes.TimeType, datetime.datetime):
@@ -361,7 +387,7 @@ def TestDynamic():
     try:
         check_get_set_raises(ValueError, o.GetSetInt, "foo")
         raise error("no exception raised")
-    except pythoncom.com_error, exc:
+    except pythoncom.com_error as exc:
         if exc.hresult != winerror.DISP_E_TYPEMISMATCH:
             raise
 
@@ -447,8 +473,12 @@ def TestGenerated():
     progress("Testing connection points")
     o2 = win32com.client.DispatchWithEvents(o, RandomEventHandler)
     TestEvents(o2, o2)
+    o2 = win32com.client.DispatchWithEvents(o, NewStyleRandomEventHandler)
+    TestEvents(o2, o2)
     # and a plain "WithEvents".
     handler = win32com.client.WithEvents(o, RandomEventHandler)
+    TestEvents(o, handler)
+    handler = win32com.client.WithEvents(o, NewStyleRandomEventHandler)
     TestEvents(o, handler)
     progress("Finished generated .py test.")
 
@@ -506,8 +536,8 @@ def _TestPyVariantFails(o, is_generated, val, exc):
 def TestPyVariant(o, is_generated):
     _TestPyVariant(o, is_generated, VARIANT(pythoncom.VT_UI1, 1))
     _TestPyVariant(o, is_generated, VARIANT(pythoncom.VT_ARRAY | pythoncom.VT_UI4, [1,2,3]))
-    _TestPyVariant(o, is_generated, VARIANT(pythoncom.VT_BSTR, u"hello"))
-    _TestPyVariant(o, is_generated, VARIANT(pythoncom.VT_ARRAY | pythoncom.VT_BSTR, [u"hello", u"there"]))
+    _TestPyVariant(o, is_generated, VARIANT(pythoncom.VT_BSTR, "hello"))
+    _TestPyVariant(o, is_generated, VARIANT(pythoncom.VT_ARRAY | pythoncom.VT_BSTR, ["hello", "there"]))
     def check_dispatch(got):
         assert isinstance(got._oleobj_, pythoncom.TypeIIDs[pythoncom.IID_IDispatch])
     _TestPyVariant(o, is_generated, VARIANT(pythoncom.VT_DISPATCH, o), check_dispatch)
@@ -529,10 +559,15 @@ def TestCounter(counter, bIsGenerated):
     # Test random access into container
     progress("Testing counter", repr(counter))
     import random
-    for i in xrange(50):
+    for i in range(50):
         num = int(random.random() * len(counter))
         try:
-            ret = counter[num]
+            # XXX - this appears broken by commit 08a14d4deb374eaa06378509cf44078ad467b9dc -
+            # We shouldn't need to do generated differently than dynamic.
+            if bIsGenerated:
+                ret = counter.Item(num+1)
+            else:
+                ret = counter[num]
             if ret != num+1:
                 raise error("Random access into element %d failed - return was %s" % (num,repr(ret)))
         except IndexError:
@@ -554,7 +589,7 @@ def TestCounter(counter, bIsGenerated):
     counter.LBound=1
     counter.UBound=10
     if counter.LBound != 1 or counter.UBound!=10:
-        print "** Error - counter did not keep its properties"
+        print("** Error - counter did not keep its properties")
 
     if bIsGenerated:
         bounds = counter.GetBounds()
@@ -569,7 +604,7 @@ def TestCounter(counter, bIsGenerated):
     if num != 10:
         raise error("*** Unexpected number of loop iterations ***")
 
-    counter = counter._enum_.Clone() # Test Clone() and enum directly
+    counter = iter(counter)._iter_.Clone() # Test Clone() and enum directly
     counter.Reset()
     num = 0
     for item in counter:
@@ -598,7 +633,7 @@ def TestVTable(clsctx=pythoncom.CLSCTX_ALL):
     # check we fail gracefully with None passed.
     try:
         tester.TestMyInterface(None)
-    except pythoncom.com_error, details:
+    except pythoncom.com_error as details:
         pass
     # and a real object.
     tester.TestMyInterface(testee)
@@ -687,8 +722,8 @@ if __name__=='__main__':
     # Should NOT be necessary
     def NullThreadFunc():
         pass
-    import thread
-    thread.start_new( NullThreadFunc, () )
+    import _thread
+    _thread.start_new( NullThreadFunc, () )
 
     if "-v" in sys.argv: verbose = 1
     

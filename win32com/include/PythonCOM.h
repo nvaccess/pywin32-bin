@@ -227,6 +227,7 @@ public:
 extern PYCOM_EXPORT PyTypeObject PyOleEmptyType;     // equivalent to VT_EMPTY
 extern PYCOM_EXPORT PyTypeObject PyOleMissingType;     // special Python handling.
 extern PYCOM_EXPORT PyTypeObject PyOleArgNotFoundType;     // special VT_ERROR value
+extern PYCOM_EXPORT PyTypeObject PyOleNothingType;     // special VT_ERROR value
 
 // ALL of these set an appropriate Python error on bad return.
 
@@ -292,6 +293,7 @@ PYCOM_EXPORT PyObject *PyCom_PyObjectFromSAFEARRAY(SAFEARRAY *psa, VARENUM vt = 
 PYCOM_EXPORT BOOL PyCom_PyObjectAsSTGOPTIONS(PyObject *obstgoptions, STGOPTIONS **ppstgoptions);
 #endif
 PYCOM_EXPORT PyObject *PyCom_PyObjectFromSTATPROPSETSTG(STATPROPSETSTG *pStat);
+PYCOM_EXPORT BOOL PyCom_PyObjectAsSTATPROPSETSTG(PyObject *, STATPROPSETSTG *);
 
 // Currency support.
 PYCOM_EXPORT PyObject *PyObject_FromCurrency(CURRENCY &cy);
@@ -414,7 +416,7 @@ PYCOM_EXPORT BOOL PyCom_MakeOlePythonCall(PyObject *handler, DISPPARAMS FAR* par
 	EXCEPINFO FAR* pexcepinfo, UINT FAR* puArgErr, PyObject *addnlArgs);
 
 /////////////////////////////////////////////////////////////////////////////
-// class PyOleEmpty
+// Various special purpose singletons
 class PYCOM_EXPORT PyOleEmpty : public PyObject
 {
 public:
@@ -432,6 +434,13 @@ class PYCOM_EXPORT PyOleArgNotFound : public PyObject
 public:
 	PyOleArgNotFound();
 };
+
+class PYCOM_EXPORT PyOleNothing : public PyObject
+{
+public:
+	PyOleNothing();
+};
+
 
 // We need to dynamically create C++ Python objects
 // These helpers allow each type object to create it.

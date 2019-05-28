@@ -394,13 +394,7 @@ class VTableItem(DispatchItem):
 		assert typeinfo is not None, "Cant build vtables without type info!"
 
 		meth_list = list(self.mapFuncs.values()) + list(self.propMapGet.values()) + list(self.propMapPut.values())
-
-		if sys.version_info < (2,4):
-			def cmp_vtable_off(m1, m2):
-				return cmp(m1.desc[7], m2.desc[7])
-			meth_list.sort(cmp_vtable_off)
-		else:
-			meth_list.sort(key=lambda m: m.desc[7])
+		meth_list.sort(key=lambda m: m.desc[7])
 
 		# Now turn this list into the run-time representation
 		# (ready for immediate use or writing to gencache)
@@ -454,7 +448,7 @@ def _ResolveType(typerepr, itypeinfo):
 		if indir_vt == pythoncom.VT_USERDEFINED:
 			try:
 				resultTypeInfo = itypeinfo.GetRefTypeInfo(subrepr)
-			except pythoncom.com_error, details:
+			except pythoncom.com_error as details:
 				if details.hresult in [winerror.TYPE_E_CANTLOADLIBRARY, winerror.TYPE_E_LIBNOTREGISTERED]:
 					# an unregistered interface
 					return pythoncom.VT_UNKNOWN, None, None
@@ -588,7 +582,7 @@ def BuildCallList(fdesc, names, defNamedOptArg, defNamedNotOptArg, defUnnamedArg
     numArgs = numArgs - 1
   else:
     firstOptArg = numArgs - numOptArgs
-  for arg in xrange(numArgs):
+  for arg in range(numArgs):
     try:
       argName = names[arg+1] 
       namedArg = argName is not None
@@ -633,4 +627,4 @@ def BuildCallList(fdesc, names, defNamedOptArg, defNamedNotOptArg, defUnnamedArg
 
 
 if __name__=='__main__':
-  print "Use 'makepy.py' to generate Python code - this module is just a helper"
+  print("Use 'makepy.py' to generate Python code - this module is just a helper")

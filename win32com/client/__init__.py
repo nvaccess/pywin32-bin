@@ -7,8 +7,8 @@
 # with dynamic.Dispatch behaviour, where dynamic objects are always used.
 
 import pythoncom
-import dynamic
-import gencache
+from . import dynamic
+from . import gencache
 import sys
 import pywintypes
 
@@ -31,7 +31,7 @@ def __WrapDispatch(dispatch, userName = None, resultCLSID = None, typeinfo = Non
     except (pythoncom.com_error, AttributeError):
       pass
   if resultCLSID is not None:
-    import gencache
+    from . import gencache
     # Attempt to load generated module support
     # This may load the module, and make it available
     klass = gencache.GetClassForCLSID(resultCLSID)
@@ -124,10 +124,17 @@ class CDispatch(dynamic.CDispatch):
     assert UnicodeToString is None, "this is deprecated and will go away"
     return Dispatch(ob, userName, returnCLSID,None)
 
-def CastTo(ob, target):
+def CastTo(ob, target, typelib = None):
     """'Cast' a COM object to another interface"""
     # todo - should support target being an IID
-    if hasattr(target, "index"): # string like
+    mod = None
+    if typelib is not None: # caller specified target typelib (TypelibSpec). See e.g. selecttlb.EnumTlbs().
+      mod = gencache.MakeModuleForTypelib(typelib.clsid, typelib.lcid, int(typelib.major, 16), int(typelib.minor, 16))
+      if not hasattr(mod, target):
+        raise ValueError("The interface name '%s' does not appear in the " \
+                         "specified library %r" % (target, typelib.ver_desc))
+
+    elif hasattr(target, "index"): # string like
     # for now, we assume makepy for this to work.
         if "CLSID" not in ob.__class__.__dict__:
             # Eeek - no makepy support - try and build it.
@@ -152,10 +159,11 @@ def CastTo(ob, target):
             raise ValueError("The interface name '%s' does not appear in the " \
                                 "same library as object '%r'" % (target, ob))
         mod = gencache.GetModuleForCLSID(target_clsid)
-        target_class = getattr(mod, target)
-        # resolve coclass to interface
-        target_class = getattr(target_class, "default_interface", target_class)
-        return target_class(ob) # auto QI magic happens
+    if mod is not None:
+      target_class = getattr(mod, target)
+      # resolve coclass to interface
+      target_class = getattr(target_class, "default_interface", target_class)
+      return target_class(ob) # auto QI magic happens
     raise ValueError
 
 class Constants:
@@ -398,7 +406,7 @@ def Record(name, object):
     app.MoveTo(point)
   """
   # XXX - to do - probably should allow "object" to already be a module object.
-  import gencache
+  from . import gencache
   object = gencache.EnsureDispatch(object)
   module = sys.modules[object.__class__.__module__]
   # to allow us to work correctly with "demand generated" code,
@@ -424,7 +432,7 @@ class DispatchBaseClass:
 		elif isinstance(oobj, DispatchBaseClass):
 			try:
 				oobj = oobj._oleobj_.QueryInterface(self.CLSID, pythoncom.IID_IDispatch) # Must be a valid COM instance
-			except pythoncom.com_error, details:
+			except pythoncom.com_error as details:
 				import winerror
 				# Some stupid objects fail here, even tho it is _already_ IDispatch!!??
 				# Eg, Lotus notes.

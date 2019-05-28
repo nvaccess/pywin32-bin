@@ -8,11 +8,6 @@ import win32com
 import winerror
 from win32com.server.util import wrap
 
-try:
-    __file__ # 2.3 only for __main__
-except NameError:
-    __file__ = sys.argv[0]
-
 class CPippo:
     #
     # COM declarations    
@@ -42,7 +37,7 @@ def BuildTypelib():
     idl = os.path.abspath(os.path.join(this_dir, "pippo.idl"))
     tlb=os.path.splitext(idl)[0] + '.tlb'
     if newer(idl, tlb):
-        print "Compiling %s" % (idl,)
+        print("Compiling %s" % (idl,))
         rc = os.system ('midl "%s"' % (idl,))
         if rc:
             raise RuntimeError("Compiling MIDL failed!")
@@ -51,7 +46,7 @@ def BuildTypelib():
         for fname in "dlldata.c pippo_i.c pippo_p.c pippo.h".split():
             os.remove(os.path.join(this_dir, fname))
     
-    print "Registering %s" % (tlb,)
+    print("Registering %s" % (tlb,))
     tli=pythoncom.LoadTypeLib(tlb)
     pythoncom.RegisterTypeLib(tli,tlb)
 
@@ -63,8 +58,8 @@ def UnregisterTypelib():
                                     k._typelib_version_[1], 
                                     0, 
                                     pythoncom.SYS_WIN32)
-        print "Unregistered typelib"
-    except pythoncom.error, details:
+        print("Unregistered typelib")
+    except pythoncom.error as details:
         if details[0]==winerror.TYPE_E_REGISTRYACCESS:
             pass
         else:

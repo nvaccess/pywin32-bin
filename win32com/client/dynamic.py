@@ -21,7 +21,7 @@ import types
 
 import pythoncom
 import winerror
-import build
+from . import build
 
 from pywintypes import IIDType
 
@@ -53,14 +53,14 @@ ALL_INVOKE_TYPES = [
 def debug_print(*args):
 	if debugging:
 		for arg in args:
-			print arg,
-		print
+			print(arg, end=' ')
+		print()
 
 def debug_attr_print(*args):
 	if debugging_attr:
 		for arg in args:
-			print arg,
-		print
+			print(arg, end=' ')
+		print()
 
 # A helper to create method objects on the fly
 py3k = sys.version_info > (3,0)
@@ -77,7 +77,7 @@ PyIUnknownType = pythoncom.TypeIIDs[pythoncom.IID_IUnknown]
 if py3k:
 	_GoodDispatchTypes=(str, IIDType)
 else:
-	_GoodDispatchTypes=(str, IIDType, unicode)
+	_GoodDispatchTypes=(str, IIDType, str)
 _defaultDispatchItem=build.DispatchItem
 
 def _GetGoodDispatch(IDispatch, clsctx = pythoncom.CLSCTX_SERVER):
@@ -101,11 +101,11 @@ def _GetGoodDispatchAndUserName(IDispatch, userName, clsctx):
 		# Displayed name should be a plain string in py2k, and unicode in py3k
 		if isinstance(IDispatch, str):
 			userName = IDispatch
-		elif not py3k and isinstance(IDispatch, unicode):
+		elif not py3k and isinstance(IDispatch, str):
 			# 2to3 converts the above 'unicode' to 'str', but this will never be executed in py3k
 			userName = IDispatch.encode("ascii", "replace")
 		## ??? else userName remains None ???
-	elif not py3k and isinstance(userName, unicode):
+	elif not py3k and isinstance(userName, str):
 		# 2to3 converts the above 'unicode' to 'str', but this will never be executed in py3k
 		# As above - always a plain string in py2k
 		userName = userName.encode("ascii", "replace")
@@ -113,9 +113,14 @@ def _GetGoodDispatchAndUserName(IDispatch, userName, clsctx):
 		userName = str(userName)
 	return (_GetGoodDispatch(IDispatch, clsctx), userName)
 
-def _GetDescInvokeType(entry, default_invoke_type):
-	if not entry or not entry.desc: return default_invoke_type
-	return entry.desc[4]
+def _GetDescInvokeType(entry, invoke_type):
+	# determine the wFlags argument passed as input to IDispatch::Invoke
+	if not entry or not entry.desc: return invoke_type
+	varkind = entry.desc[4] # from VARDESC struct returned by ITypeComp::Bind
+	if varkind == pythoncom.VAR_DISPATCH and invoke_type == pythoncom.INVOKE_PROPERTYGET:
+		return pythoncom.INVOKE_FUNC | invoke_type # DISPATCH_METHOD & DISPATCH_PROPERTYGET can be combined in IDispatch::Invoke
+	else:
+		return varkind
 
 def Dispatch(IDispatch, userName = None, createClass = None, typeinfo = None, UnicodeToString=None, clsctx = pythoncom.CLSCTX_SERVER):
 	assert UnicodeToString is None, "this is deprecated and will go away"
@@ -192,7 +197,7 @@ class CDispatch:
 			return self._get_good_object_(self._oleobj_.Invoke(*allArgs),self._olerepr_.defaultDispatchName,None)
 		raise TypeError("This dispatch object does not define a default method")
 
-	def __nonzero__(self):
+	def __bool__(self):
 		return True # ie "if object:" should always be "true" - without this, __len__ is tried.
 		# _Possibly_ want to defer to __len__ if available, but Im not sure this is
 		# desirable???
@@ -205,7 +210,7 @@ class CDispatch:
 		# fall back to the __repr__ if the object has no default method.
 		try:
 			return str(self.__call__())
-		except pythoncom.com_error, details:
+		except pythoncom.com_error as details:
 			if details.hresult not in ERRORS_BAD_CONTEXT:
 				raise
 			return self.__repr__()
@@ -234,7 +239,7 @@ class CDispatch:
 			enum = self._oleobj_.InvokeTypes(pythoncom.DISPID_NEWENUM,LCID,invkind,(13, 10),())
 		except pythoncom.com_error:
 			return None # no enumerator for this object.
-		import util
+		from . import util
 		return util.WrapEnum(enum, None)
 
 	def __getitem__(self, index): # syver modified
@@ -325,7 +330,7 @@ class CDispatch:
 			# "Dispatch" in the exec'd code is win32com.client.Dispatch, not ours.
 			globNameSpace = globals().copy()
 			globNameSpace["Dispatch"] = win32com.client.Dispatch
-			exec codeObject in globNameSpace, tempNameSpace # self.__dict__, self.__dict__
+			exec(codeObject, globNameSpace, tempNameSpace) # self.__dict__, self.__dict__
 			name = methodName
 			# Save the function in map.
 			fn = self._builtMethods_[name] = tempNameSpace[name]
@@ -339,7 +344,7 @@ class CDispatch:
 	def _Release_(self):
 		"""Cleanup object - like a close - to force cleanup when you dont 
 		   want to rely on Python's reference counting."""
-		for childCont in self._mapCachedItems_.itervalues():
+		for childCont in self._mapCachedItems_.values():
 			childCont._Release_()
 		self._mapCachedItems_ = {}
 		if self._oleobj_:
@@ -361,20 +366,20 @@ class CDispatch:
 		
 	def _print_details_(self):
 		"Debug routine - dumps what it knows about an object."
-		print "AxDispatch container",self._username_
+		print("AxDispatch container",self._username_)
 		try:
-			print "Methods:"
-			for method in self._olerepr_.mapFuncs.iterkeys():
-				print "\t", method
-			print "Props:"
-			for prop, entry in self._olerepr_.propMap.iteritems():
-				print "\t%s = 0x%x - %s" % (prop, entry.dispid, repr(entry))
-			print "Get Props:"
-			for prop, entry in self._olerepr_.propMapGet.iteritems():
-				print "\t%s = 0x%x - %s" % (prop, entry.dispid, repr(entry))
-			print "Put Props:"
-			for prop, entry in self._olerepr_.propMapPut.iteritems():
-				print "\t%s = 0x%x - %s" % (prop, entry.dispid, repr(entry))
+			print("Methods:")
+			for method in self._olerepr_.mapFuncs.keys():
+				print("\t", method)
+			print("Props:")
+			for prop, entry in self._olerepr_.propMap.items():
+				print("\t%s = 0x%x - %s" % (prop, entry.dispid, repr(entry)))
+			print("Get Props:")
+			for prop, entry in self._olerepr_.propMapGet.items():
+				print("\t%s = 0x%x - %s" % (prop, entry.dispid, repr(entry)))
+			print("Put Props:")
+			for prop, entry in self._olerepr_.propMapPut.items():
+				print("\t%s = 0x%x - %s" % (prop, entry.dispid, repr(entry)))
 		except:
 			traceback.print_exc()
 
@@ -509,7 +514,7 @@ class CDispatch:
 			debug_attr_print("Getting property Id 0x%x from OLE object" % retEntry.dispid)
 			try:
 				ret = self._oleobj_.Invoke(retEntry.dispid,0,invoke_type,1)
-			except pythoncom.com_error, details:
+			except pythoncom.com_error as details:
 				if details.hresult in ERRORS_BAD_CONTEXT:
 					# May be a method.
 					self._olerepr_.mapFuncs[attr] = retEntry
